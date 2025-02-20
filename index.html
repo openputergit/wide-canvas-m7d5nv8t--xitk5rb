@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VidVibe - Short Video Platform</title>
+    <script src="https://unpkg.com/@popperjs/core@2"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        :root {
+            --glass-bg: rgba(255, 255, 255, 0.1);
+            --glass-border: rgba(255, 255, 255, 0.2);
+        }
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(45deg, #1a1a1a, #2d2d2d);
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .glass-morphism {
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+        }
+
+        .video-container {
+            aspect-ratio: 9/16;
+            max-height: calc(100vh - 120px);
+        }
+
+        .action-button {
+            transition: all 0.3s ease;
+        }
+
+        .action-button:active {
+            transform: scale(0.95);
+        }
+
+        .loader {
+            width: 48px;
+            height: 48px;
+            border: 5px solid #FFF;
+            border-bottom-color: transparent;
+            border-radius: 50%;
+            display: inline-block;
+            box-sizing: border-box;
+            animation: rotation 1s linear infinite;
+        }
+
+        @keyframes rotation {
+            0% { transform: rotate(0deg) }
+            100% { transform: rotate(360deg) }
+        }
+
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+</head>
+<body class="text-white">
+    <div id="app" class="h-screen flex flex-col">
+        <!-- Navigation -->
+        <nav class="glass-morphism px-4 py-3 flex justify-between items-center fixed top-0 left-0 right-0 z-50">
+            <div class="text-xl font-bold">VidVibe</div>
+            <div class="flex gap-4">
+                <button @click="activeTab = 'following'" :class="{'text-pink-500': activeTab === 'following'}" class="font-medium">Following</button>
+                <button @click="activeTab = 'foryou'" :class="{'text-pink-500': activeTab === 'foryou'}" class="font-medium">For You</button>
+            </div>
+            <button @click="showUpload = true" class="glass-morphism px-4 py-2 rounded-full">
+                <i class="bi bi-plus-lg"></i>
+            </button>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="flex-1 mt-16 overflow-hidden">
+            <div class="video-feed h-full" ref="videoFeed">
+                <div v-for="(video, index) in videos" :key="index" 
+                     class="video-container relative w-full mx-auto bg-black">
+                    <video
+                        :ref="'video' + index"
+                        :src="video.url"
+                        class="w-full h-full object-cover"
+                        loop
+                        @click="togglePlay($event.target)"
+                    ></video>
+
+                    <!-- Video Controls -->
+                    <div class="absolute bottom-0 left-0 right-0 p-4 glass-morphism m-4 rounded-xl">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h3 class="font-bold">@{{video.username}}</h3>
+                                <p class="text-sm">{{video.caption}}</p>
+                            </div>
+                            <div class="flex flex-col items-center gap-4">
+                                <button @click="like(index)" class="action-button">
+                                    <i class="bi" :class="video.liked ? 'bi-heart-fill text-red-500' : 'bi-heart'"></i>
+                                    <span class="text-xs">{{video.likes}}</span>
+                                </button>
+                                <button @click="comment(index)" class="action-button">
+                                    <i class="bi bi-chat"></i>
+                                    <span class="text-xs">{{video.comments}}</span>
+                                </button>
+                                <button @click="share(index)" class="action-button">
+                                    <i class="bi bi-share"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Upload Modal -->
+        <div v-if="showUpload" class="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center">
+            <div class="glass-morphism p-6 w-11/12 max-w-md">
+                <h2 class="text-xl font-bold mb-4">Upload Video</h2>
+                <input type="file" accept="video/*" class="mb-4 w-full">
+                <textarea placeholder="Add a caption..." class="w-full p-2 rounded bg-transparent glass-morphism mb-4"></textarea>
+                <div class="flex gap-2">
+                    <button @click="showUpload = false" class="flex-1 glass-morphism py-2 rounded-lg">Cancel</button>
+                    <button @click="uploadVideo" class="flex-1 bg-pink-500 py-2 rounded-lg">Upload</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue
+
+        createApp({
+            data() {
+                return {
+                    activeTab: 'foryou',
+                    showUpload: false,
+                    videos: [
+                        {
+                            url: 'https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-1232-large.mp4',
+                            username: 'creativesoul',
+                            caption: '✨ Living in the moment #lifestyle',
+                            likes: 1234,
+                            comments: 88,
+                            liked: false
+                        },
+                        {
+                            url: 'https://assets.mixkit.co/videos/preview/mixkit-tree-with-yellow-flowers-1173-large.mp4',
+                            username: 'naturelover',
+                            caption: '🌸 Spring vibes #nature',
+                            likes: 2341,
+                            comments: 156,
+                            liked: false
+                        },
+                        {
+                            url: 'https://assets.mixkit.co/videos/preview/mixkit-man-under-multicolored-lights-1237-large.mp4',
+                            username: 'urbanvibes',
+                            caption: '🎵 Dance like nobody\'s watching #dance',
+                            likes: 5678,
+                            comments: 234,
+                            liked: false
+                        }
+                    ]
+                }
+            },
+            mounted() {
+                this.setupSwipeHandler();
+                this.playCurrentVideo(0);
+            },
+            methods: {
+                setupSwipeHandler() {
+                    const hammer = new Hammer(this.$refs.videoFeed);
+                    hammer.get('swipe').set({ direction: Hammer.DIRECTION_VERTICAL });
+                    
+                    hammer.on('swipeup swipedown', (ev) => {
+                        const videos = document.querySelectorAll('video');
+                        const currentIndex = Array.from(videos).findIndex(video => !video.paused);
+                        
+                        if (ev.type === 'swipeup' && currentIndex < this.videos.length - 1) {
+                            this.playCurrentVideo(currentIndex + 1);
+                        } else if (ev.type === 'swipedown' && currentIndex > 0) {
+                            this.playCurrentVideo(currentIndex - 1);
+                        }
+                    });
+                },
+                playCurrentVideo(index) {
+                    const videos = document.querySelectorAll('video');
+                    videos.forEach((video, idx) => {
+                        if (idx === index) {
+                            video.play();
+                            video.scrollIntoView({ behavior: 'smooth' });
+                        } else {
+                            video.pause();
+                        }
+                    });
+                },
+                togglePlay(video) {
+                    if (video.paused) {
+                        video.play();
+                    } else {
+                        video.pause();
+                    }
+                },
+                like(index) {
+                    this.videos[index].liked = !this.videos[index].liked;
+                    this.videos[index].likes += this.videos[index].liked ? 1 : -1;
+                },
+                comment(index) {
+                    alert('Comment feature coming soon!');
+                },
+                share(index) {
+                    alert('Share feature coming soon!');
+                },
+                uploadVideo() {
+                    alert('Upload feature coming soon!');
+                    this.showUpload = false;
+                }
+            }
+        }).mount('#app')
+    </script>
+<script>document.body.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); return }, { passive: false })</script>
+	</body>
+</html>
